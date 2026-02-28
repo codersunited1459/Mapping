@@ -1,0 +1,148 @@
+Got it 👍 — I’ll give you point-wise (clean notes style) so you can paste anywhere (Java file comments, txt file, README, etc.) without formatting breaking.
+________________________________________
+📌 @OneToOne Mapping — Parameters (Point-wise)
+1️⃣ targetEntity
+•	Type: Class
+•	Default: Automatically detected
+•	Purpose: Specifies the entity class being mapped.
+•	Usage: Rarely needed.
+•	Example:
+•	@OneToOne(targetEntity = Profile.class)
+________________________________________
+2️⃣ cascade
+•	Type: CascadeType[]
+•	Default: No cascade
+•	Purpose: Defines which operations should propagate to child entity.
+•	Common values:
+o	PERSIST → save child automatically
+o	MERGE → update child automatically
+o	REMOVE → delete child automatically
+o	ALL → applies all operations
+•	Most common usage:
+•	cascade = CascadeType.ALL
+________________________________________
+3️⃣ fetch
+•	Type: FetchType
+•	Default: EAGER
+•	Purpose: Controls how related entity loads.
+•	Types:
+o	EAGER → loads immediately (default)
+o	LAZY → loads only when accessed
+•	Best practice:
+•	fetch = FetchType.LAZY
+________________________________________
+4️⃣ optional
+•	Type: boolean
+•	Default: true
+•	Purpose: Whether relationship can be NULL.
+•	Meaning:
+o	true → profile may be absent
+o	false → profile must exist
+•	Example:
+•	optional = false
+________________________________________
+5️⃣ mappedBy
+•	Type: String
+•	Default: empty
+•	Purpose: Used only in bidirectional mapping.
+•	Indicates that this side is NOT owning side.
+•	Example:
+•	@OneToOne(mappedBy = "profile")
+________________________________________
+6️⃣ orphanRemoval
+•	Type: boolean
+•	Default: false
+•	Purpose: Deletes child automatically if removed from parent.
+•	Example:
+•	orphanRemoval = true
+•	Real meaning:
+o	If user.setProfile(null) → profile gets deleted automatically.
+
+======================================================================================
+📌 @JoinColumn — Parameters (Point-wise)
+________________________________________
+1️⃣ name
+•	Type: String
+•	Default: auto generated
+•	Purpose: Name of foreign key column in DB.
+•	Example:
+•	@JoinColumn(name = "profile_id")
+________________________________________
+2️⃣ referencedColumnName
+•	Type: String
+•	Default: primary key column of target entity
+•	Purpose: Specifies which column it references.
+•	Example:
+•	@JoinColumn(referencedColumnName = "id")
+•	Usually not needed.
+________________________________________
+3️⃣ unique
+•	Type: boolean
+•	Default: false
+•	Purpose: Ensures true One-to-One relation.
+•	Example:
+•	unique = true
+•	Why needed?
+o	Prevents multiple users pointing to same profile.
+________________________________________
+4️⃣ nullable
+•	Type: boolean
+•	Default: true
+•	Purpose: Whether foreign key can be NULL.
+•	Example:
+•	nullable = false
+•	Used when relationship is mandatory.
+________________________________________
+5️⃣ insertable
+•	Type: boolean
+•	Default: true
+•	Purpose: Controls whether FK included in INSERT query.
+•	Rarely used.
+________________________________________
+6️⃣ updatable
+•	Type: boolean
+•	Default: true
+•	Purpose: Controls whether FK can be updated.
+•	Rarely used.
+________________________________________
+7️⃣ columnDefinition
+•	Type: String
+•	Default: none
+•	Purpose: Allows custom SQL column definition.
+•	Example:
+•	columnDefinition = "BIGINT"
+________________________________________
+8️⃣ foreignKey
+•	Type: ForeignKey
+•	Purpose: Specifies foreign key constraint name.
+•	Example:
+•	foreignKey = @ForeignKey(name = "fk_user_profile")
+
+************************************************************************
+📌 MOST COMMON REAL-WORLD COMBINATION
+This is what you usually see in projects:
+@OneToOne(
+    cascade = CascadeType.ALL,
+    fetch = FetchType.LAZY,
+    orphanRemoval = true
+)
+@JoinColumn(
+    name = "profile_id",
+    unique = true
+)
+private Profile profile;
+________________________________________
+📌 Owning Side Rule (VERY IMPORTANT)
+👉 The entity having @JoinColumn is called Owning Side.
+👉 Only owning side controls DB foreign key.
+________________________________________
+📌 Simple Memory Trick
+@OneToOne → defines relationship
+@JoinColumn → defines foreign key details
+
+
+
+=======================================================================================
+
+
+
