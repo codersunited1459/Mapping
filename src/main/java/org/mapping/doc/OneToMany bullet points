@@ -1,0 +1,102 @@
+Perfect 👍 I’ll give you crisp, interview-focused main points for both.
+________________________________________
+🔵 OneToMany – Unidirectional (Main Points)
+✅ 1. Only Parent Knows Child
+•	Only @OneToMany side exists.
+•	Child does NOT have @ManyToOne.
+________________________________________
+✅ 2. No mappedBy
+•	There is no mappedBy in unidirectional.
+________________________________________
+✅ 3. Foreign Key Handling
+Two possibilities:
+🔹 Case 1: Without @JoinColumn
+@OneToMany
+private List<Employee> employees;
+👉 Hibernate creates a join table automatically.
+❌ Not efficient.
+________________________________________
+🔹 Case 2: With @JoinColumn
+@OneToMany
+@JoinColumn(name = "department_id")
+private List<Employee> employees;
+👉 Foreign key will be created in child table.
+👉 Parent controls the relationship.
+________________________________________
+✅ 4. No Bidirectional Navigation
+•	You cannot access parent from child.
+________________________________________
+✅ 5. Simpler but Less Flexible
+•	Good for simple use cases.
+•	Not suitable when child needs parent reference.
+________________________________________
+✅ 6. Performance Consideration
+•	Join table creation (if no JoinColumn) is inefficient.
+•	Extra update queries may happen.
+________________________________________
+________________________________________
+🟢 OneToMany – Bidirectional (Main Points)
+________________________________________
+✅ 1. Both Sides Have Mapping
+Parent:
+@OneToMany(mappedBy = "department")
+Child:
+@ManyToOne
+@JoinColumn(name = "department_id")
+________________________________________
+✅ 2. mappedBy is Mandatory
+•	Must be on @OneToMany side.
+•	Prevents join table creation.
+•	Tells JPA who owns relationship.
+________________________________________
+✅ 3. Owning Side
+👉 ManyToOne side is always owning side
+👉 Foreign key stored in child table
+________________________________________
+✅ 4. Must Maintain Both Sides
+department.addEmployee(employee);
+employee.setDepartment(department);
+Use helper methods.
+________________________________________
+✅ 5. More Flexible
+•	You can navigate:
+o	Parent → Children
+o	Child → Parent
+________________________________________
+✅ 6. Default Fetch
+•	OneToMany → LAZY
+•	ManyToOne → EAGER (default)
+⚠️ Be careful with performance.
+________________________________________
+✅ 7. Most Recommended Approach
+•	Industry standard
+•	Clean foreign key structure
+•	Better performance than join table
+________________________________________
+________________________________________
+🔥 Quick Comparison Table
+Feature	Unidirectional	Bidirectional
+Navigation	Parent → Child only	Both sides
+mappedBy	❌ No	✅ Yes
+Owning side	Parent (if JoinColumn used)	Many side
+Join table risk	Yes (if no JoinColumn)	No
+Foreign key location	Child table	Child table
+Flexibility	Less	More
+Industry usage	Rare	Very common
+________________________________________
+🎯 Final Interview Summary
+👉 Always remember:
+•	Many side owns relationship
+•	Foreign key always in child table
+•	Use mappedBy in bidirectional
+•	Use helper methods
+•	Default fetch = LAZY
+•	Avoid EAGER for collections
+________________________________________
+If you want, I can now give:
+•	🔥 5 tricky interview questions on OneToMany
+•	🔥 Internal Hibernate working explanation
+•	🔥 N+1 problem deep explanation
+•	🔥 Real production mistakes developers make
+Tell me which one 😄
+

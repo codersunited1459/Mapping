@@ -1,0 +1,341 @@
+________________________________________
+1️⃣ Can we Persist Data From Both Sides?
+Short Answer
+❌ No — the relationship is persisted only by the owning side.
+✅ But you can call save() from either entity's repository.
+The actual foreign key update happens only from the owning side.
+In your example:
+•	Department → @OneToMany(mappedBy="department") → Inverse side
+•	Employee → @ManyToOne @JoinColumn → Owning side
+👉 Employee controls the foreign key (department_id).
+________________________________________
+2️⃣ What Happens If You Persist From Inverse Side Only?
+Example:
+Department dept = departmentRepository.findById(1L).get();
+
+Employee emp = new Employee();
+emp.setName("Raghav");
+
+dept.getEmployees().add(emp);
+
+departmentRepository.save(dept);
+Result
+❌ department_id will NOT be set.
+Because:
+•	Department is inverse side
+•	Hibernate ignores relationship changes from inverse side.
+________________________________________
+3️⃣ Correct Way (Owning Side Must Be Set)
+Department dept = departmentRepository.findById(1L).get();
+
+Employee emp = new Employee();
+emp.setName("Raghav");
+
+emp.setDepartment(dept); // Owning side
+
+dept.getEmployees().add(emp); // optional but recommended
+
+employeeRepository.save(emp);
+Now:
+✅ department_id will be stored.
+________________________________________
+4️⃣ Why JPA Works Like This
+Because only one side must control the relationship to avoid conflicts.
+So JPA defines:
+Side	Role
+@ManyToOne	Owning side
+@OneToMany(mappedBy)	Inverse side
+Only the owning side writes the foreign key.
+________________________________________
+5️⃣ Fetching Data (Very Different From Persisting)
+Fetching is not restricted.
+Because both entities have references.
+You can fetch:
+From Department → Employees
+Department dept = departmentRepository.findById(1L).get();
+List<Employee> employees = dept.getEmployees();
+________________________________________
+From Employee → Department
+Employee emp = employeeRepository.findById(1L).get();
+Department dept = emp.getDepartment();
+________________________________________
+6️⃣ So Final Answer
+Operation	Owning Side	Inverse Side
+Persist Relationship	✅ Works	❌ Ignored
+Update Relationship	✅ Works	❌ Ignored
+Fetch Data	✅ Works	✅ Works
+Navigation	Both possible	Both possible
+________________________________________
+7️⃣ Golden Rule (Interview Answer)
+In bidirectional relationships, only the owning side controls the database relationship, while both sides can be used for navigation and fetching.
+________________________________________
+8️⃣ Best Practice (Helper Method)
+To avoid mistakes:
+public void addEmployee(Employee emp){
+    employees.add(emp);
+    emp.setDepartment(this);
+}
+This keeps both sides synchronized.
+________________________________________
+
+
+If persisting is not done from inverse  side that is Department then why you given the below example
+ // Create Department with Employees
+    public DepartmentDTO createDepartment(DepartmentDTO dto) {
+
+        Department department = new Department();
+        department.setName(dto.getName());
+
+        if (dto.getEmployees() != null) {
+            dto.getEmployees().forEach(empDTO -> {
+                Employee employee = new Employee();
+                employee.setName(empDTO.getName());
+                employee.setSalary(empDTO.getSalary());
+                department.addEmployee(employee);
+            });
+        }
+
+        Department saved = departmentRepository.save(department);
+
+        return mapToDTO(saved);
+    }
+
+which is working
+
+
+Great observation 👍 Your confusion is very valid, and this is exactly where many developers misunderstand bidirectional mappings. Let's break it clearly.
+________________________________________
+1️⃣ What I Said Earlier
+I said:
+Relationship changes must happen from the owning side (Employee).
+That statement is correct.
+But in your example, the relationship is actually being set on the owning side indirectly.
+________________________________________
+2️⃣ Look Carefully at Your Code
+You used this helper method:
+department.addEmployee(employee);
+Now look at the implementation:
+public void addEmployee(Employee employee) {
+    employees.add(employee);
+    employee.setDepartment(this);
+}
+This line is the key:
+employee.setDepartment(this);
+That means:
+✔ The owning side (Employee) is being set.
+So even though you call the method from Department, internally it updates the owning side.
+________________________________________
+3️⃣ What Actually Happens Internally
+When this runs:
+department.addEmployee(employee);
+Two things happen:
+1️⃣ Add to collection (inverse side)
+Department.employees.add(employee)
+2️⃣ Set owning side
+Employee.department = department
+The second step is what Hibernate cares about.
+________________________________________
+4️⃣ Why departmentRepository.save() Works
+Because of:
+cascade = CascadeType.ALL
+@OneToMany(mappedBy="department", cascade=CascadeType.ALL)
+So when you do:
+departmentRepository.save(department);
+Hibernate also saves the employees.
+But the relationship is still determined by
+employee.setDepartment(department)
+________________________________________
+5️⃣ If Helper Method Did NOT Set Owning Side
+If your method was like this:
+public void addEmployee(Employee employee) {
+    employees.add(employee);
+}
+Then this code:
+department.addEmployee(employee);
+departmentRepository.save(department);
+Would produce:
+employee.department = null
+Result:
+❌ department_id = NULL
+❌ relationship not persisted
+________________________________________
+6️⃣ So What Actually Matters
+Not which repository you call.
+What matters is:
+owning side must be updated
+In this mapping:
+Employee.department
+________________________________________
+7️⃣ Real Rule (Most Accurate Statement)
+Action	Required
+Save parent	Optional
+Save child	Optional
+Set owning side	Mandatory
+________________________________________
+8️⃣ Correct Mental Model
+Think like this:
+Department → just a view of the relationship
+Employee → controls the database FK
+So:
+Employee.department = department
+is what actually writes:
+department_id
+________________________________________
+9️⃣ Interview-Level Explanation
+If an interviewer asks:
+Why does saving from the parent side work in bidirectional OneToMany?
+Correct answer:
+Because the helper method sets the owning side (ManyToOne), and cascading persists the child entities. The actual relationship is still controlled by the owning side.
+________________________________________
+🔟 One More Important Tip
+Always use helper methods like this:
+public void addEmployee(Employee employee) {
+    employees.add(employee);
+    employee.setDepartment(this);
+}
+This ensures both sides stay consistent.
+________________________________________
+Why Hibernate sometimes executes:
+INSERT
+INSERT
+UPDATE
+UPDATE
+even when the mapping looks correct.
+This is a very tricky concept that even experienced developers struggle with.
+
+Great 👍 Now let's understand the very tricky Hibernate behavior you asked about.
+Sometimes when using @OneToMany, Hibernate executes SQL like:
+INSERT
+INSERT
+UPDATE
+UPDATE
+Developers expect only INSERT statements, but Hibernate performs extra UPDATE queries. Let's understand why this happens.
+________________________________________
+1️⃣ Scenario Example
+Entities:
+Department
+@Entity
+public class Department {
+
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private String name;
+
+    @OneToMany(mappedBy = "department", cascade = CascadeType.ALL)
+    private List<Employee> employees = new ArrayList<>();
+
+}
+________________________________________
+Employee
+@Entity
+public class Employee {
+
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private String name;
+
+    @ManyToOne
+    @JoinColumn(name = "department_id")
+    private Department department;
+
+}
+________________________________________
+2️⃣ Example Code
+Department dept = new Department();
+dept.setName("IT");
+
+Employee emp1 = new Employee();
+emp1.setName("Raghav");
+
+Employee emp2 = new Employee();
+emp2.setName("Arjun");
+
+dept.addEmployee(emp1);
+dept.addEmployee(emp2);
+
+departmentRepository.save(dept);
+________________________________________
+3️⃣ Expected SQL (What Developers Think)
+INSERT INTO department
+INSERT INTO employee
+INSERT INTO employee
+________________________________________
+4️⃣ Actual SQL Hibernate May Generate
+INSERT INTO department (name)
+
+INSERT INTO employee (name, department_id)
+
+INSERT INTO employee (name, department_id)
+
+UPDATE employee SET department_id = ?
+UPDATE employee SET department_id = ?
+Extra UPDATE queries appear.
+________________________________________
+5️⃣ Why Hibernate Does This
+Because of entity state management inside the Persistence Context.
+When you persist Department:
+1️⃣ Hibernate inserts the parent first.
+INSERT department
+2️⃣ Then inserts employees.
+But sometimes Hibernate initially inserts employees without the FK, then updates it later once the parent ID is fully known.
+Example internal process:
+INSERT employee (name, department_id = NULL)
+Then:
+UPDATE employee SET department_id = 1
+________________________________________
+6️⃣ When This Happens More Often
+Extra updates usually happen when:
+•	IDs are generated with IDENTITY
+•	Entities are flushed in different phases
+•	Relationship is synchronized later in the persistence context
+________________________________________
+7️⃣ How to Reduce Extra Updates
+Best practices:
+Always set owning side before saving
+employee.setDepartment(department);
+Use helper methods
+public void addEmployee(Employee employee){
+    employees.add(employee);
+    employee.setDepartment(this);
+}
+Use proper cascading
+cascade = CascadeType.ALL
+________________________________________
+8️⃣ Important Internal Concept
+Hibernate maintains a Persistence Context (First Level Cache).
+Inside it, entities go through states:
+State	Meaning
+Transient	New object
+Managed	Attached to persistence context
+Detached	Removed from context
+Removed	Scheduled for deletion
+When relationships change, Hibernate schedules SQL updates during flush.
+________________________________________
+9️⃣ Real Reason Developers See Extra Updates
+If relationship synchronization happens after insertion, Hibernate must issue an UPDATE to fix the FK.
+________________________________________
+🔟 Best Production Practice
+Always maintain both sides of relationship before persistence:
+Department dept = new Department();
+
+Employee emp = new Employee();
+
+dept.getEmployees().add(emp);
+emp.setDepartment(dept);
+Then persist.
+________________________________________
+🎯 Senior-Level Interview Answer
+If asked:
+Why does Hibernate sometimes execute UPDATE after INSERT in OneToMany mappings?
+Answer:
+Because Hibernate manages entity relationships inside the persistence context.
+ If the foreign key value is not fully determined at insert time, Hibernate inserts
+ the child entity first and later updates the foreign key once the relationship is synchronized.
+________________________________________
+
+
+

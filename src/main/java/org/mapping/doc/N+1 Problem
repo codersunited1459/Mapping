@@ -1,0 +1,320 @@
+The N+1 Query Problem is a performance problem that occurs mainly in ORM frameworks like Hibernate and Spring Data JPA when fetching related data from a database.
+It happens when one query is executed to fetch parent data and then N additional queries are executed to fetch related child data.
+So total queries = 1 + N
+________________________________________
+1. Basic Idea of N+1 Problem
+Suppose we have two tables:
+Department
+id	name
+1	IT
+2	HR
+Employee
+id	name	department_id
+1	John	1
+2	Mike	1
+3	Sara	2
+Relationship:
+Department 1 ---- * Employee
+________________________________________
+2. Example Entities
+Department Entity
+@Entity
+public class Department {
+
+    @Id
+    private Long id;
+
+    private String name;
+
+    @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
+    private List<Employee> employees;
+}
+Employee Entity
+@Entity
+public class Employee {
+
+    @Id
+    private Long id;
+
+    private String name;
+
+    @ManyToOne
+    @JoinColumn(name="department_id")
+    private Department department;
+}
+________________________________________
+3. Scenario that Causes N+1 Problem
+Suppose you write this code:
+List<Department> departments = departmentRepository.findAll();
+
+for(Department dept : departments){
+    System.out.println(dept.getEmployees());
+}
+________________________________________
+4. Queries Generated
+Query 1 → Fetch all departments
+SELECT * FROM department;
+Result:
+Dept1
+Dept2
+________________________________________
+Query 2 → Fetch employees for Dept1
+SELECT * FROM employee WHERE department_id = 1;
+________________________________________
+Query 3 → Fetch employees for Dept2
+SELECT * FROM employee WHERE department_id = 2;
+________________________________________
+Total Queries:
+1 (departments)
++ 2 (employees for each department)
+
+= 3 Queries
+If there are 100 departments, queries become:
+1 + 100 = 101 queries
+This is the N+1 problem.
+________________________________________
+5. Why It Happens
+Because of LAZY loading.
+@OneToMany(fetch = FetchType.LAZY)
+When departments are loaded:
+employees are NOT loaded
+When you access:
+dept.getEmployees()
+Hibernate fires another query.
+________________________________________
+6. Visual Flow
+Application
+    |
+    |---- Query 1
+    |     SELECT * FROM department
+    |
+    |---- Query 2
+    |     SELECT * FROM employee WHERE dept_id=1
+    |
+    |---- Query 3
+    |     SELECT * FROM employee WHERE dept_id=2
+    |
+    |---- Query 4
+    |     SELECT * FROM employee WHERE dept_id=3
+So the database gets many small queries instead of one optimized query.
+________________________________________
+7. Why It Is a Big Problem
+Imagine production system:
+Departments = 1000
+Employees per department = 50
+Queries executed:
+1 + 1000 = 1001 queries
+Problems:
+•	High DB load
+•	High network latency
+•	Slow API response
+•	Bad scalability
+________________________________________
+8. How to Solve N+1 Problem
+There are 4 common solutions.
+________________________________________
+1️⃣ JOIN FETCH (Most common)
+Use JPQL fetch join.
+@Query("SELECT d FROM Department d JOIN FETCH d.employees")
+List<Department> findAllDepartmentsWithEmployees();
+SQL generated:
+SELECT d.*, e.*
+FROM department d
+JOIN employee e
+ON d.id = e.department_id;
+Now only 1 query runs.
+________________________________________
+2️⃣ EntityGraph
+@EntityGraph(attributePaths = "employees")
+List<Department> findAll();
+This tells Hibernate:
+Fetch employees along with department
+________________________________________
+3️⃣ Batch Fetching
+spring.jpa.properties.hibernate.default_batch_fetch_size=10
+Instead of:
+SELECT * FROM employee WHERE dept_id = 1
+SELECT * FROM employee WHERE dept_id = 2
+SELECT * FROM employee WHERE dept_id = 3
+Hibernate will do:
+SELECT * FROM employee WHERE dept_id IN (1,2,3)
+________________________________________
+4️⃣ DTO Projection
+Instead of entities, fetch DTO.
+@Query("""
+SELECT new com.dto.DepartmentDTO(d.name,e.name)
+FROM Department d
+JOIN d.employees e
+""")
+This fetches everything in one query.
+________________________________________
+9. Difference Between Lazy vs Eager
+LAZY
+Department -> employees loaded later
+Causes N+1.
+________________________________________
+EAGER
+Department -> employees loaded immediately
+But EAGER can cause huge joins and performance issues.
+So best practice:
+Use LAZY + FETCH JOIN when needed
+________________________________________
+10. Real Example in Production
+Example API:
+GET /departments
+Bad implementation:
+departmentRepository.findAll()
+Then:
+dept.getEmployees()
+If there are 500 departments:
+501 queries
+Good implementation:
+@Query("SELECT d FROM Department d JOIN FETCH d.employees")
+Now:
+1 query
+________________________________________
+11. Simple Diagram
+Without Optimization
+
+1 Query -> Departments
+N Queries -> Employees
+
+Total = N + 1
+With Fetch Join
+
+1 Query -> Departments + Employees
+________________________________________
+12. Important Interview Point
+N+1 occurs when:
+Parent entity loaded first
+Child entities loaded one by one
+Usually happens with:
+@OneToMany
+@ManyToMany
+________________________________________
+13. How to Detect N+1
+Enable SQL logs:
+spring.jpa.show-sql=true
+or
+logging.level.org.hibernate.SQL=DEBUG
+If you see same query repeating many times, N+1 exists.
+________________________________________
+✅ Simple definition
+N+1 problem occurs when one query loads parent entities and N additional queries load their child entities, causing serious performance issues.
+________________________________________
+
+
+
+
+
+
+
+
+
+
+
+
+From the given solution...that is @Query("SELECT d FROM Department d JOIN FETCH d.employees") Even in eager loading also happens the same right….?
+Good question 👍 — many developers get confused between EAGER loading and FETCH JOIN when discussing the N+1 Query Problem.
+The short answer is:
+❌ EAGER loading does NOT guarantee solving the N+1 problem.
+✅ JOIN FETCH guarantees a single query.
+Let’s understand why.
+________________________________________
+1️⃣ What Happens With EAGER Loading
+Example entity:
+@Entity
+public class Department {
+
+    @OneToMany(mappedBy = "department", fetch = FetchType.EAGER)
+    private List<Employee> employees;
+}
+Now run:
+List<Department> departments = departmentRepository.findAll();
+In Hibernate, EAGER means:
+"Load employees automatically when department is loaded."
+But Hibernate decides HOW to load them.
+________________________________________
+Possible Queries Generated
+Hibernate may generate:
+Query 1
+SELECT * FROM department;
+Query 2
+SELECT * FROM employee WHERE department_id = 1;
+Query 3
+SELECT * FROM employee WHERE department_id = 2;
+Query 4
+SELECT * FROM employee WHERE department_id = 3;
+So:
+1 + N queries
+Even though it is EAGER.
+Why?
+Because EAGER only guarantees when to fetch, not how to fetch.
+________________________________________
+2️⃣ What JOIN FETCH Does
+Now consider:
+@Query("SELECT d FROM Department d JOIN FETCH d.employees")
+List<Department> findAllDepartmentsWithEmployees();
+This tells Hibernate explicitly:
+"Fetch departments and employees in the same SQL query."
+Generated SQL:
+SELECT d.*, e.*
+FROM department d
+JOIN employee e
+ON d.id = e.department_id;
+Now:
+Only 1 query
+No N+1 problem.
+________________________________________
+3️⃣ Key Difference
+Feature	EAGER Fetch	FETCH JOIN
+Who decides query strategy	Hibernate	Developer
+Query count guaranteed	❌ No	✅ Yes
+N+1 possible	✅ Yes	❌ No
+SQL control	❌ Low	✅ High
+________________________________________
+4️⃣ Important Real-World Rule
+In **Spring Data JPA projects developers follow this rule:
+Always keep relationships LAZY
+Fetch explicitly using JOIN FETCH when needed
+Example:
+@OneToMany(fetch = FetchType.LAZY)
+Then:
+@Query("SELECT d FROM Department d JOIN FETCH d.employees")
+This gives maximum performance control.
+________________________________________
+5️⃣ Why EAGER Is Actually Dangerous
+Imagine:
+Department
+  → Employees
+      → Address
+          → Country
+If all are EAGER, Hibernate may generate huge joins or many queries, causing performance disaster.
+That's why best practice is:
+Never use EAGER in production unless absolutely required.
+________________________________________
+6️⃣ Visual Comparison
+EAGER
+Load Departments
+     |
+     |--- Query Employees for Dept1
+     |--- Query Employees for Dept2
+     |--- Query Employees for Dept3
+Queries:
+1 + N
+________________________________________
+FETCH JOIN
+SELECT d.*, e.*
+FROM department d
+JOIN employee e
+Queries:
+1
+________________________________________
+✅ Final takeaway
+EAGER = WHEN data is fetched
+FETCH JOIN = HOW data is fetched
+Only FETCH JOIN prevents N+1 reliably.
+________________________________________
+
+
+

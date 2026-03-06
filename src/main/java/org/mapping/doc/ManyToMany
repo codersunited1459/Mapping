@@ -1,0 +1,156 @@
+________________________________________
+1️⃣ What is ManyToMany Mapping
+A ManyToMany relationship means:
+Many A → Many B
+Example:
+Student ↔ Course
+Meaning:
+One student can enroll in many courses
+One course can have many students
+So we cannot store this with a single foreign key.
+Instead, a third table (join table) is used.
+________________________________________
+2️⃣ Database Structure
+Tables:
+Student
+---------
+id
+name
+
+Course
+---------
+id
+title
+Join table:
+student_course
+-----------------
+student_id
+course_id
+Example data:
+student_course
+---------------
+1 | 101
+1 | 102
+2 | 101
+Meaning:
+Student 1 → Course 101
+Student 1 → Course 102
+Student 2 → Course 101
+________________________________________
+3️⃣ Entity Mapping (Bidirectional)
+Student Entity (Owning Side)
+@Entity
+public class Student {
+
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private String name;
+
+    @ManyToMany
+    @JoinTable(
+        name = "student_course",
+        joinColumns = @JoinColumn(name = "student_id"),
+        inverseJoinColumns = @JoinColumn(name = "course_id")
+    )
+    private List<Course> courses = new ArrayList<>();
+
+}
+________________________________________
+Course Entity (Inverse Side)
+@Entity
+public class Course {
+
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private String title;
+
+    @ManyToMany(mappedBy = "courses")
+    private List<Student> students = new ArrayList<>();
+
+}
+________________________________________
+4️⃣ Owning Side in ManyToMany
+The entity that contains @JoinTable is the owning side.
+Here:
+Student → Owning Side
+Course  → Inverse Side
+Only Student controls the join table.
+________________________________________
+5️⃣ Persisting Data
+Example:
+Student student = new Student();
+student.setName("Ravi");
+
+Course c1 = courseRepository.findById(1L).get();
+Course c2 = courseRepository.findById(2L).get();
+
+student.getCourses().add(c1);
+student.getCourses().add(c2);
+
+studentRepository.save(student);
+Hibernate inserts:
+insert into student values(...)
+insert into student_course(student_id, course_id) values(...)
+________________________________________
+6️⃣ Helper Method (Best Practice)
+Just like OneToMany, we maintain both sides.
+Student
+public void addCourse(Course course) {
+    courses.add(course);
+    course.getStudents().add(this);
+}
+________________________________________
+7️⃣ Important Points
+1️⃣ Join Table Always Exists
+ManyToMany always creates:
+entity1_entity2
+Example:
+student_course
+________________________________________
+2️⃣ No Foreign Key in Entity Tables
+Foreign keys exist only in:
+join table
+________________________________________
+3️⃣ Avoid CascadeType.REMOVE
+Example:
+@ManyToMany(cascade = CascadeType.ALL)
+Danger:
+Deleting a student may delete courses too.
+Instead use:
+cascade = {CascadeType.PERSIST, CascadeType.MERGE}
+________________________________________
+4️⃣ Most Real Projects Avoid Direct ManyToMany
+Instead they use an intermediate entity.
+Example:
+Student
+Course
+Enrollment
+Because we may want fields like:
+enrollment_date
+grade
+status
+So we create:
+Student 1 --- * Enrollment * --- 1 Course
+Two OneToMany relationships.
+________________________________________
+8️⃣ Real World Example
+Example systems:
+User ↔ Role
+Student ↔ Course
+Actor ↔ Movie
+Product ↔ Category
+________________________________________
+9️⃣ Summary
+Concept	Explanation
+Relationship	Many records in both entities
+Storage	Join table
+Owning side	Entity with @JoinTable
+Inverse side	Uses mappedBy
+Best practice	Use helper methods
+Advanced practice	Replace with join entity
+________________________________________
+
