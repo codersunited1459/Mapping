@@ -1,0 +1,405 @@
+So no matter from which side we are persisting we need to set the primary key of inverse side to the owning side .. that is employee.setdepartment(this) ..right
+________________________________________
+1️⃣ Core Rule of JPA Relationships
+In a bidirectional relationship, only the owning side controls the database relationship.
+In your example:
+Department  → inverse side
+Employee    → owning side
+Because Employee has:
+@ManyToOne
+@JoinColumn(name = "dept_id")
+private Department department;
+So the foreign key dept_id exists in the Employee table.
+________________________________________
+2️⃣ What Must Be Set Before Persisting
+To persist the relationship correctly, the owning side must be set.
+So this is mandatory:
+employee.setDepartment(department);
+This tells Hibernate:
+employee.dept_id = department.id
+________________________________________
+3️⃣ If Persisting From Department Side
+Even if you start saving from the inverse side, you still must update the owning side.
+Example:
+public void addEmployee(Employee employee) {
+    employees.add(employee);
+    employee.setDepartment(this);   // VERY IMPORTANT
+}
+Why?
+Because Department cannot update the FK column.
+Only Employee can.
+________________________________________
+4️⃣ What Happens If You Don't Set Owning Side
+Example:
+department.getEmployees().add(employee);
+departmentRepository.save(department);
+But if you do not set:
+employee.setDepartment(department)
+Then Hibernate will insert:
+employee.dept_id = null
+So the relationship will not be created in DB.
+________________________________________
+5️⃣ Correct Bidirectional Helper Method
+Best practice:
+public void addEmployee(Employee employee) {
+    this.employees.add(employee);
+    employee.setDepartment(this);
+}
+This ensures:
+Department.employees → updated
+Employee.department  → updated
+Both sides stay in sync.
+________________________________________
+6️⃣ Important Clarification About Your Statement
+You said:
+"set the primary key of inverse side to the owning side"
+Slight correction:
+You are not setting the primary key directly.
+You are setting the entity reference, and Hibernate internally uses the primary key.
+Example:
+employee.setDepartment(department);
+Hibernate internally converts it to:
+employee.dept_id = department.id
+________________________________________
+7️⃣ Golden Rule (Very Important)
+Always remember this rule:
+Owning side decides the relationship in database.
+So owning side must be set before persisting.
+________________________________________
+8️⃣ Final Summary
+✔ Relationship is stored in owning side table
+✔ Owning side contains foreign key
+✔ Always set owning side before save
+Example:
+employee.setDepartment(department);
+employeeRepository.save(employee);
+Even when persisting from Department:
+department.addEmployee(employee);
+departmentRepository.save(department);
+Internally this works because:
+employee.setDepartment(department)
+________________________________________
+✅ Your understanding is actually very close to how senior developers think about JPA relationships.
+________________________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+So then what is the use of cascade here that is in inverse side that is department we are using cascade.CASCADETYPE.ALL ….?
+
+Good question 👍. This is a very common confusion in JPA.
+You are asking:
+If Employee (owning side) controls the relationship, then what is the use of
+cascade = CascadeType.ALL on the inverse side (Department)?
+Let's clarify this step by step.
+________________________________________
+1️⃣ What Cascade Actually Does
+Cascade does NOT control the relationship.
+Cascade only controls operation propagation.
+Meaning:
+If an operation happens on Parent,
+the same operation should happen on Child.
+Example operations:
+•	PERSIST
+•	MERGE
+•	REMOVE
+•	REFRESH
+•	DETACH
+So cascade simply means:
+propagate operations to related entities
+________________________________________
+2️⃣ Example Without Cascade
+Entities:
+@OneToMany(mappedBy = "department")
+private List<Employee> employees;
+Code:
+Department dept = new Department();
+dept.setName("IT");
+
+Employee emp = new Employee();
+emp.setName("Ravi");
+
+emp.setDepartment(dept);
+
+dept.getEmployees().add(emp);
+
+departmentRepository.save(dept);
+What happens?
+❌ Only Department gets saved
+❌ Employee will not be saved
+Because cascade is not enabled.
+________________________________________
+3️⃣ Example With Cascade
+@OneToMany(mappedBy = "department", cascade = CascadeType.ALL)
+private List<Employee> employees;
+Now when you do:
+departmentRepository.save(dept);
+Hibernate automatically does:
+save(department)
+save(employee1)
+save(employee2)
+save(employee3)
+So one save triggers many saves.
+________________________________________
+4️⃣ Important Point
+Cascade does not change owning side rules.
+You still must set:
+employee.setDepartment(department);
+Cascade will not fix relationship mapping.
+It only ensures child entities are also persisted.
+________________________________________
+5️⃣ Why We Put Cascade On Department
+Because Department is logically the parent.
+Example:
+Department
+   |
+   |---- Employee
+   |---- Employee
+   |---- Employee
+So operations should propagate:
+Save Department → Save Employees
+Delete Department → Delete Employees
+________________________________________
+6️⃣ Example Delete Case
+If we use:
+cascade = CascadeType.ALL
+Then:
+departmentRepository.delete(dept);
+Hibernate executes:
+delete employees
+delete department
+Without cascade:
+❌ Foreign key constraint error.
+________________________________________
+7️⃣ Real World Example
+Think of:
+Order → OrderItems
+When you save Order, all OrderItems should be saved.
+save(order)
+Should automatically do:
+save(orderItem1)
+save(orderItem2)
+save(orderItem3)
+That is what cascade does.
+________________________________________
+8️⃣ Relationship Control vs Cascade
+Concept	Responsibility
+Owning Side	Controls foreign key
+Cascade	Propagates operations
+Inverse Side	Just mapping reference
+________________________________________
+9️⃣ Final Flow In Your Example
+When you write:
+department.addEmployee(emp);
+departmentRepository.save(department);
+Internally:
+employee.setDepartment(department)   ← relationship
+cascade persist                      ← saves employee
+Both are needed.
+________________________________________
+🔑 Final Key Point
+Owning side → controls relationship (FK)
+Cascade → controls persistence propagation
+These are two completely different responsibilities.
+________________________________________
+
+What if employeerepository.save()….?
+
+Good follow-up 👍. Let's see what happens if you call employeeRepository.save(employee) instead of saving the department.
+________________________________________
+1️⃣ If You Save From Employee Side (Owning Side)
+Example:
+Employee emp = new Employee();
+emp.setName("Ravi");
+emp.setSalary(50000);
+
+Department dept = departmentRepository.findById(1L).get();
+
+emp.setDepartment(dept);
+
+employeeRepository.save(emp);
+Hibernate SQL:
+insert into employee (name, salary, dept_id)
+values ('Ravi', 50000, 1);
+✔ Employee saved
+✔ dept_id is stored
+✔ Relationship created
+Because Employee is the owning side.
+________________________________________
+2️⃣ Does Cascade From Department Matter Here?
+No ❌
+This cascade:
+@OneToMany(mappedBy = "department", cascade = CascadeType.ALL)
+is only useful when you save Department.
+When you do:
+employeeRepository.save(emp);
+cascade on Department side will NOT be triggered.
+Cascade only works from the entity on which the operation is called.
+________________________________________
+3️⃣ If Department Is New (Not Saved Yet)
+Example:
+Department dept = new Department();
+dept.setName("IT");
+
+Employee emp = new Employee();
+emp.setName("Ravi");
+
+emp.setDepartment(dept);
+
+employeeRepository.save(emp);
+What happens?
+❌ Error:
+TransientPropertyValueException
+object references an unsaved transient instance
+Because department is not persisted.
+________________________________________
+4️⃣ How To Fix That
+You must either:
+Option 1 — Save Department First
+departmentRepository.save(dept);
+
+emp.setDepartment(dept);
+employeeRepository.save(emp);
+________________________________________
+Option 2 — Cascade From Employee Side
+@ManyToOne(cascade = CascadeType.PERSIST)
+@JoinColumn(name = "dept_id")
+private Department department;
+Then:
+employeeRepository.save(emp);
+will also save the department.
+But this is not recommended in many designs, because:
+Many employees might share the same department.
+________________________________________
+5️⃣ Real Project Practice
+Most APIs do this:
+Department dept = departmentRepository.findById(dto.getDepartmentId());
+
+employee.setDepartment(dept);
+
+employeeRepository.save(employee);
+Department already exists.
+________________________________________
+6️⃣ Summary
+Scenario	Result
+employeeRepository.save(employee)	Works (owning side)
+departmentRepository.save(department)	Needs cascade to save employees
+department not saved	Error
+cascade on Department	Works only when saving Department
+cascade on Employee	Works when saving Employee
+________________________________________
+7️⃣ Simple Rule
+Save from owning side → relationship works directly
+Save from inverse side → need cascade
+________________________________________
+Why Hibernate recommends updating both sides of a bidirectional relationship even though only the owning side controls the DB.
+Good follow-up 👍. Let's see what happens if you call employeeRepository.save(employee) instead of saving the department.
+________________________________________
+1️⃣ If You Save From Employee Side (Owning Side)
+Example:
+Employee emp = new Employee();
+emp.setName("Ravi");
+emp.setSalary(50000);
+
+Department dept = departmentRepository.findById(1L).get();
+
+emp.setDepartment(dept);
+
+employeeRepository.save(emp);
+Hibernate SQL:
+insert into employee (name, salary, dept_id)
+values ('Ravi', 50000, 1);
+✔ Employee saved
+✔ dept_id is stored
+✔ Relationship created
+Because Employee is the owning side.
+________________________________________
+2️⃣ Does Cascade From Department Matter Here?
+No ❌
+This cascade:
+@OneToMany(mappedBy = "department", cascade = CascadeType.ALL)
+is only useful when you save Department.
+When you do:
+employeeRepository.save(emp);
+cascade on Department side will NOT be triggered.
+Cascade only works from the entity on which the operation is called.
+________________________________________
+3️⃣ If Department Is New (Not Saved Yet)
+Example:
+Department dept = new Department();
+dept.setName("IT");
+
+Employee emp = new Employee();
+emp.setName("Ravi");
+
+emp.setDepartment(dept);
+
+employeeRepository.save(emp);
+What happens?
+❌ Error:
+TransientPropertyValueException
+object references an unsaved transient instance
+Because department is not persisted.
+________________________________________
+4️⃣ How To Fix That
+You must either:
+Option 1 — Save Department First
+departmentRepository.save(dept);
+
+emp.setDepartment(dept);
+employeeRepository.save(emp);
+________________________________________
+Option 2 — Cascade From Employee Side
+@ManyToOne(cascade = CascadeType.PERSIST)
+@JoinColumn(name = "dept_id")
+private Department department;
+Then:
+employeeRepository.save(emp);
+will also save the department.
+But this is not recommended in many designs, because:
+Many employees might share the same department.
+________________________________________
+5️⃣ Real Project Practice
+Most APIs do this:
+Department dept = departmentRepository.findById(dto.getDepartmentId());
+
+employee.setDepartment(dept);
+
+employeeRepository.save(employee);
+Department already exists.
+________________________________________
+6️⃣ Summary
+Scenario	Result
+employeeRepository.save(employee)	Works (owning side)
+departmentRepository.save(department)	Needs cascade to save employees
+department not saved	Error
+cascade on Department	Works only when saving Department
+cascade on Employee	Works when saving Employee
+________________________________________
+7️⃣ Simple Rule
+Save from owning side → relationship works directly
+Save from inverse side → need cascade
+________________________________________
+
+
+

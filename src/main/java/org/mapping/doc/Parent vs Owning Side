@@ -1,0 +1,96 @@
+1️⃣ Parent vs Owning Side (Core Difference)
+Concept	Meaning	Who decides it
+Parent / Child	Logical domain relationship	Business model
+Owning Side / Inverse Side	Who manages the foreign key in DB	JPA mapping
+So:
+✔ Parent/Child → conceptual
+✔ Owning/Inverse → technical (JPA)
+________________________________________
+2️⃣ Example (Department–Employee)
+Department 1 -------- * Employee
+Logical Relationship
+Parent → Department
+Child → Employee
+Because a department contains employees.
+________________________________________
+JPA Ownership
+Employee → Owning Side
+Department → Inverse Side
+Because:
+@ManyToOne
+@JoinColumn(name="department_id")
+controls the foreign key.
+________________________________________
+3️⃣ So Here
+Entity	Role
+Department	Parent + Inverse
+Employee	Child + Owning
+So yes ✅ Parent is not always owning side.
+________________________________________
+4️⃣ Is It Situational?
+Yes 👍 ownership depends on where @JoinColumn is placed.
+Example:
+Case 1 (Most Common)
+@ManyToOne
+@JoinColumn(name="department_id")
+Owning side → Employee
+________________________________________
+Case 2 (Unidirectional OneToMany)
+@OneToMany
+@JoinColumn(name="department_id")
+Now:
+Owning side → Department
+Even though Department is parent.
+________________________________________
+5️⃣ Another Example (OneToOne)
+Example: User ↔ Profile
+You could design:
+Case A
+User
+@OneToOne
+@JoinColumn
+User = owning side
+________________________________________
+Case B
+Profile
+@OneToOne
+@JoinColumn
+Profile = owning side
+So owning side is decided by mapping, not by domain.
+________________________________________
+6️⃣ Golden Rule
+Ownership is determined by:
+@JoinColumn
+or
+mappedBy
+Rule:
+Annotation	Meaning
+@JoinColumn	Owning side
+mappedBy	Inverse side
+________________________________________
+7️⃣ Important Interview Statement
+Best explanation:
+Parent/Child is a logical domain relationship, while Owning/Inverse side is a JPA persistence concept that determines which entity manages the foreign key in the database.
+________________________________________
+8️⃣ Visual Summary
+LOGICAL MODEL
+-----------------
+Department (Parent)
+      |
+      | 1..*
+      |
+Employee (Child)
+
+
+JPA MAPPING
+-----------------
+Department (@OneToMany mappedBy) → Inverse
+Employee (@ManyToOne JoinColumn) → Owning
+________________________________________
+9️⃣ Final Answer to Your Question
+✔ Yes Parent and Owning Side are different concepts
+✔ Parent is not necessarily the owning side
+✔ Ownership is decided by JPA mapping (@JoinColumn)
+✔ So it is situational
+Your understanding is correct.
+________________________________________
